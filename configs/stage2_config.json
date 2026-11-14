@@ -1,0 +1,52 @@
+{
+  "stage": 2,
+  "task": "general_abnormal_pathological_tissue_segmentation",
+  "classes": {
+    "0": "background",
+    "1": "healthy_non_lesional_tissue",
+    "2": "abnormal_pathological_tissue"
+  },
+  "sources": {
+    "LiTS": {
+      "source_labels": {
+        "0": 0,
+        "1": 1,
+        "2": 2
+      },
+      "meaning": "0=background, 1=liver/non-lesional liver, 2=tumor"
+    },
+    "KiTS19": {
+      "source_labels": {
+        "0": 0,
+        "1": 1,
+        "2": 2
+      },
+      "meaning": "0=background, 1=kidney/non-lesional kidney, 2=tumor"
+    }
+  },
+  "preprocessing": {
+    "target_spacing_mm": [
+      2.5,
+      1.5,
+      1.5
+    ],
+    "orientation": "RAS",
+    "image_interpolation": "linear",
+    "label_interpolation": "nearest",
+    "intensity_clip_hu": [
+      -1000,
+      1000
+    ],
+    "patch_size": [
+      64,
+      192,
+      160
+    ]
+  },
+  "splits": {
+    "train_fraction": 0.8,
+    "val_fraction": 0.2,
+    "seed": 42,
+    "split_by_case": true
+  }
+}

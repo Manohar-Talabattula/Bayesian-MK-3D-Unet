@@ -1,0 +1,116 @@
+stage: 1
+name: unified_12_organ_segmentation
+
+target_classes:
+  0: background
+  1: spleen
+  2: right_kidney
+  3: left_kidney
+  4: gallbladder
+  5: esophagus
+  6: liver
+  7: stomach
+  8: aorta
+  9: inferior_vena_cava
+  10: pancreas
+  11: right_adrenal_gland
+  12: left_adrenal_gland
+
+datasets:
+
+  btcv:
+    image_dir: "C:/Users/HPCLAB/Downloads/RawData/RawData/Training/img"
+    label_dir: "C:/Users/HPCLAB/Downloads/RawData/RawData/Training/label"
+    split: train
+    label_mapping:
+      0: 0
+      1: 1
+      2: 2
+      3: 3
+      4: 4
+      5: 5
+      6: 6
+      7: 7
+      8: 8
+      9: 9
+      11: 10
+      12: 11
+      13: 12
+
+  amos22:
+    image_dir: "C:/Users/HPCLAB/Downloads/AMOS22/train/imagesTr"
+    label_dir: "C:/Users/HPCLAB/Downloads/AMOS22/train/labelsTr"
+    split: train
+    label_mapping:
+      0: 0
+      1: 1
+      2: 2
+      3: 3
+      4: 4
+      5: 5
+      6: 6
+      7: 7
+      8: 8
+      9: 9
+      10: 10
+      11: 11
+      12: 12
+
+  amos22_valid:
+    image_dir: "C:/Users/HPCLAB/Downloads/AMOS22/valid/imagesVa"
+    label_dir: "C:/Users/HPCLAB/Downloads/AMOS22/valid/labelsVa"
+    split: val
+    label_mapping:
+      0: 0
+      1: 1
+      2: 2
+      3: 3
+      4: 4
+      5: 5
+      6: 6
+      7: 7
+      8: 8
+      9: 9
+      10: 10
+      11: 11
+      12: 12
+
+  totalsegmentator:
+    image_dir: "C:/Users/HPCLAB/Downloads/Total-Segmentator/Images"
+    label_dir: "C:/Users/HPCLAB/Downloads/Total-Segmentator/Masks"
+    metadata: "C:/Users/HPCLAB/Downloads/Total-Segmentator/meta.csv"
+    split_source: metadata
+    label_mapping:
+      0: 0
+      1: 1
+      2: 2
+      3: 3
+      4: 4
+      15: 5
+      5: 6
+      6: 7
+      52: 8
+      63: 9
+      7: 10
+      8: 11
+      9: 12
+
+preprocessing:
+  output_format: nii.gz
+  target_classes: 13
+  preserve_original_data: true
+
+  target_spacing:
+    x: 1.5
+    y: 1.5
+    z: 3.0
+
+  intensity:
+    clip_min: -1000
+    clip_max: 1000
+    normalize: minmax
+
+  patch_size:
+    x: 96
+    y: 96
+    z: 64

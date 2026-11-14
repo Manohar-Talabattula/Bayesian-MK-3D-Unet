@@ -1,0 +1,77 @@
+
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# Dataset directories
+datasets/
+data/
+
+# Model checkpoints and weights
+*.pth
+*.pt
+*.ckpt
+*.onnx
+*.safetensors
+
+# Experiment outputs and predictions
+evaluation/task07_full_volume_v2/
+evaluation/task07_stage3_exports/
+evaluation/task07_stage3_exports_overlap075/
+evaluation/task07_stage3_exports_threshold065/
+evaluation/task07_stage3_exports_threshold070/
+evaluation/task07_stage3_exports_threshold075/
+
+# Logs
+*.log
+runs/
+wandb/
+
+# OS files
+.DS_Store
+Thumbs.db
+# Medical imaging data and generated volumes
+*.nii
+*.nii.gz
+
+# Model checkpoints and weights
+*.pth
+*.pt
+*.ckpt
+
+# Virtual environments and Python cache
+.venv/
+__pycache__/
+*.pyc
+
+# Datasets
+datasets/
+Masks/
+
+# Generated evaluation outputs
+evaluation/inference_results/
+evaluation/uncertainty_results/
+evaluation/stage2_anatomy_gate/stage1_organ_masks/
+evaluation/task07_full_volume*/
+evaluation/task07_stage3_exports*/
+evaluation/uncertainty_analysis/
+# Generated evaluation reports and visualizations
+evaluation/stage2_anatomy_gate/
+evaluation/visual_results/
+evaluation/additional_metrics/*.txt
+
+# Generated Stage 3 validation outputs
+stage3/ground_truth_validation_v1/
