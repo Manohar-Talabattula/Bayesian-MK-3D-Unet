@@ -1,0 +1,243 @@
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import nibabel as nib
+import numpy as np
+import torch
+
+from evaluation import run_task07_stage3_export_v1 as stage3
+from preprocessing.prepare_stage2_dataset import resample_case, normalize_ct
+from models.bayesian_mk_unet3d import BayesianMKUNet3D
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+STAGE1_CHECKPOINT = ROOT / "training" / "checkpoints_exp5_samples4" / "best.pth"
+STAGE2_CHECKPOINT = (
+    ROOT / "datasets" / "stage2" / "models" /
+    "task07_finetune_v2" / "latest_task07_finetune.pth"
+)
+
+DEFAULT_THRESHOLD = 0.80
+DEFAULT_GATE_MARGIN_MM = 15.0
+
+
+def load_models():
+    """Build and load the two existing trained models."""
+
+    if not STAGE1_CHECKPOINT.is_file():
+        raise FileNotFoundError(f"Stage 1 checkpoint not found: {STAGE1_CHECKPOINT}")
+
+    if not STAGE2_CHECKPOINT.is_file():
+        raise FileNotFoundError(f"Stage 2 checkpoint not found: {STAGE2_CHECKPOINT}")
+
+    device = stage3.DEVICE
+
+    stage1_model = BayesianMKUNet3D(
+        in_channels=1,
+        num_classes=13,
+        base_channels=16,
+        dropout=0.1,
+    ).to(device)
+
+    stage3.load_checkpoint(stage1_model, STAGE1_CHECKPOINT)
+    stage1_model.eval()
+
+    stage2_model = stage3.build_stage2_model().to(device)
+    stage3.load_checkpoint(stage2_model, STAGE2_CHECKPOINT)
+    stage2_model.eval()
+
+    return stage1_model, stage2_model
+
+
+def predict_case(
+    image_path: str | Path,
+    stage1_model,
+    stage2_model,
+    threshold: float = DEFAULT_THRESHOLD,
+    gate_margin_mm: float = DEFAULT_GATE_MARGIN_MM,
+):
+    """Run the complete Stage 1 -> Stage 2 -> Stage 3 cascade."""
+
+    image_path = Path(image_path)
+
+    if not image_path.is_file():
+        raise FileNotFoundError(f"Input CT scan not found: {image_path}")
+
+    if not (image_path.name.endswith(".nii") or image_path.name.endswith(".nii.gz")):
+        raise ValueError("Input must be a .nii or .nii.gz file.")
+
+    if not 0.0 < threshold < 1.0:
+        raise ValueError("Threshold must be between 0 and 1.")
+
+    if gate_margin_mm < 0:
+        raise ValueError("Gate margin cannot be negative.")
+
+    # ---------------------------------------------------------
+    # Load original scan and create Stage 2 reference grid
+    # ---------------------------------------------------------
+
+    source_nii = nib.as_closest_canonical(nib.load(str(image_path)))
+
+    if len(source_nii.shape) != 3:
+        raise ValueError(
+            f"Expected a 3D CT volume; received shape {source_nii.shape}"
+        )
+
+    # Reuse the exact Stage 2 resampling and normalization functions.
+    # The second argument is only used to obtain the matching resampled
+    # geometry; no ground-truth label is used for inference.
+    stage2_nii, _ = resample_case(source_nii, source_nii)
+
+    stage2_raw = stage2_nii.get_fdata(dtype=np.float32)
+    stage2_normalized = normalize_ct(stage2_raw).astype(np.float32)
+
+    if not np.isfinite(stage2_normalized).all():
+        raise ValueError("The input CT scan contains invalid intensity values.")
+
+    # Stage 2 model uses Z,Y,X array ordering.
+    stage2_model_image = np.transpose(
+        stage2_normalized, (2, 1, 0)
+    ).copy()
+
+    # ---------------------------------------------------------
+    # Stage 1: pancreas localization
+    # ---------------------------------------------------------
+
+    stage1_transform = stage3.get_stage1_preprocessor()
+
+    stage1_image, stage1_affine = stage3.preprocess_stage1_case(
+        image_path,
+        stage1_transform,
+    )
+
+    stage1_prediction = stage3.predict_stage1_organs(
+        stage1_model,
+        stage1_image,
+    )
+
+    # Class 10 = pancreas.
+    stage1_pancreas = stage1_prediction == 10
+
+    # Map pancreas gate from Stage 1 geometry to Stage 2 geometry.
+    stage2_pancreas_gate = stage3.map_stage1_gate_to_stage2(
+        stage1_pancreas,
+        stage1_affine,
+        stage2_nii,
+    )
+
+    # ---------------------------------------------------------
+    # Stage 2: lesion probability prediction
+    # ---------------------------------------------------------
+
+    stage2_probabilities_zyx = stage3.predict_stage2_probability(
+        stage2_model,
+        stage2_model_image,
+    )
+
+    # Convert probability array back to X,Y,Z.
+    stage2_probabilities_xyz = np.transpose(
+        stage2_probabilities_zyx, (0, 3, 2, 1)
+    ).copy()
+
+    # Class 2 = pancreatic lesion/pathology.
+    lesion_probability = stage2_probabilities_xyz[2]
+
+    if lesion_probability.shape != stage2_nii.shape[:3]:
+        raise RuntimeError(
+            "Stage 2 output shape does not match the reference CT grid: "
+            f"{lesion_probability.shape} vs {stage2_nii.shape[:3]}"
+        )
+
+    # ---------------------------------------------------------
+    # Stage 3: physical pancreas gate + probability threshold
+    # ---------------------------------------------------------
+
+    spacing_xyz = np.linalg.norm(
+        stage2_nii.affine[:3, :3], axis=0
+    )
+
+    expanded_gate = stage3.dilate_physical(
+        stage2_pancreas_gate,
+        spacing_xyz,
+        gate_margin_mm,
+    )
+
+    baseline_mask = lesion_probability >= threshold
+    final_mask = baseline_mask & expanded_gate
+
+    # ---------------------------------------------------------
+    # Quantification
+    # ---------------------------------------------------------
+
+    measurements = stage3.quantify_lesion_mask(
+        final_mask,
+        stage2_nii.affine,
+    )
+
+    baseline_measurements = stage3.quantify_lesion_mask(
+        baseline_mask,
+        stage2_nii.affine,
+    )
+
+    report = {
+        "project": "Bayesian MK-3D-UNet",
+        "task": "Research pancreatic lesion segmentation",
+        "input_file": image_path.name,
+        "device": str(stage3.DEVICE),
+        "stage1": {
+            "checkpoint": str(STAGE1_CHECKPOINT.relative_to(ROOT)),
+            "predicted_pancreas_voxels": int(stage1_pancreas.sum()),
+            "mapped_pancreas_voxels": int(stage2_pancreas_gate.sum()),
+        },
+        "stage2": {
+            "checkpoint": str(STAGE2_CHECKPOINT.relative_to(ROOT)),
+            "lesion_class": 2,
+            "probability_threshold": float(threshold),
+        },
+        "stage3": {
+            "gate_margin_mm": float(gate_margin_mm),
+            "baseline_thresholded_volume_ml":
+                baseline_measurements["predicted_volume_ml"],
+            "final_gated_volume_ml":
+                measurements["predicted_volume_ml"],
+        },
+        "final_lesion_measurements": measurements,
+        "warning": (
+            "Research output only. Predicted regions and connected "
+            "components are not clinically verified lesions. "
+            "This software is not intended for diagnosis or treatment."
+        ),
+    }
+
+    # Keep the original Stage 2 reference affine and header.
+    final_nii = nib.Nifti1Image(
+        final_mask.astype(np.uint8),
+        affine=stage2_nii.affine,
+        header=stage2_nii.header.copy(),
+    )
+    final_nii.set_data_dtype(np.uint8)
+
+    probability_nii = nib.Nifti1Image(
+        lesion_probability.astype(np.float32),
+        affine=stage2_nii.affine,
+        header=stage2_nii.header.copy(),
+    )
+    probability_nii.set_data_dtype(np.float32)
+
+    return {
+        "report": report,
+        "mask_nii": final_nii,
+        "probability_nii": probability_nii,
+        "final_mask": final_mask,
+        "lesion_probability": lesion_probability,
+        "pancreas_gate": stage2_pancreas_gate,
+        "expanded_gate": expanded_gate,
+    }
+
+
+def report_to_json(report: dict) -> bytes:
+    return json.dumps(report, indent=2, allow_nan=False).encode("utf-8")
