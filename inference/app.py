@@ -15,7 +15,6 @@ from inference.predict import (
 
 st.set_page_config(
     page_title="Bayesian MK-3D-UNet",
-    page_icon="🧠",
     layout="wide",
 )
 
