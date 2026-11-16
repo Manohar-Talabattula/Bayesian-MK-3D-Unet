@@ -31,7 +31,7 @@ Tested with Python 3.12.10, PyTorch 2.13.0+cu130, MONAI 1.6.0, NiBabel 5.4.2, St
 
 Clone the repository:
 
-    git clone https://github.com/Sumanth-Kadiyam/MK_3D_UNET_PROJECT.git
+    git clone https://github.com/Manohar-Talabattula/Bayesian-MK-3D-Unet.git
     cd MK_3D_UNET_PROJECT
 
 Create a virtual environment and activate it in PowerShell:
