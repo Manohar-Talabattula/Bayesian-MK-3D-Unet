@@ -1,4 +1,4 @@
-﻿# Bayesian MK-3D-UNet
+# Bayesian MK-3D-UNet
 ## Consolidated Project Report
 
 **Project:** Bayesian MK-3D-UNet: Multi-Organ and Lesion Segmentation from 3D Abdominal CT  
@@ -121,6 +121,64 @@ Evaluation files:
 - `datasets/stage2/evaluation/stage2_threshold_sweep_results.json`
 
 **Verification note:** The 69-case evaluation confirms LiTS and KiTS19 coverage. The exact original training split and complete training history have not yet been independently verified for this consolidated report.
+
+### Anatomy-Guided LiTS/KiTS Evaluation
+
+A second evaluation experiment investigated whether Stage 1 anatomical localization could improve the general Stage 2 liver and kidney pathology predictions.
+
+**Configuration**
+- Stage 1 checkpoint: `training/checkpoints_exp5_samples4/best.pth`
+- General Stage 2 checkpoint: `datasets/stage2/models/stage2_best_balanced.pth`
+- Evaluation coverage: 69 cases
+- Stage 1 anatomical classes: right kidney, left kidney and liver
+- Anatomy-gate expansion margin: 15 mm
+- Stage 2 probability threshold: 0.65
+- Cached Stage 1 anatomical masks were reused for evaluation.
+- No model retraining was performed for this experiment.
+
+**Overall micro-averaged results**
+
+| Metric | Baseline | Anatomy-gated |
+|---|---:|---:|
+| Dice | 0.5143 | **0.5808** |
+| IoU | 0.3461 | **0.4092** |
+| Precision | 0.3965 | **0.5691** |
+| Recall | **0.7315** | 0.5929 |
+| True positives | 796,575 | 645,668 |
+| False positives | 1,212,304 | 488,782 |
+| False negatives | 292,426 | 443,333 |
+
+Anatomy gating increased micro Dice by approximately 0.0665 and substantially reduced false positives. It also reduced recall, showing that restricting predictions to an anatomical region can suppress some true-positive pathology voxels.
+
+**Dataset-wise micro-averaged results**
+
+| Dataset | Cases | Method | Dice | IoU | Precision | Recall |
+|---|---:|---|---:|---:|---:|---:|
+| LiTS Batch 1 | 6 | Baseline | 0.4299 | 0.2738 | 0.2881 | 0.8463 |
+| LiTS Batch 1 | 6 | Gated | **0.6392** | **0.4697** | **0.5161** | 0.8394 |
+| LiTS Batch 2 | 21 | Baseline | 0.4592 | 0.2980 | 0.3234 | 0.7918 |
+| LiTS Batch 2 | 21 | Gated | **0.6437** | **0.4746** | **0.5654** | 0.7471 |
+| KiTS19 | 42 | Baseline | 0.5390 | 0.3689 | 0.4343 | **0.7102** |
+| KiTS19 | 42 | Gated | **0.5581** | **0.3871** | **0.5760** | 0.5413 |
+
+The improvement was more pronounced on the LiTS subsets. KiTS19 showed a smaller Dice improvement and a more substantial recall reduction. These results indicate that the benefit of anatomical gating varies across datasets.
+
+**Representative qualitative comparisons**
+
+Four representative cases were exported. Each comparison image contains the CT slice, ground-truth pathology, baseline prediction and anatomy-gated prediction.
+
+1. LiTS Batch 1 — `LiTS_Batch1_LiTS_Batch1_0010_0000`: Dice 0.4278 → 0.7530.
+2. LiTS Batch 2 — `LiTS_Batch2_LiTS_Batch2_0057_0000`: Dice 0.1868 → 0.5348.
+3. KiTS19 — `KiTS19_KiTS19_0046_0000`: Dice 0.4027 → 0.7388.
+4. KiTS19 failure example — `KiTS19_KiTS19_0151_0000`: Dice 0.8107 → 0.0890.
+
+Comparison images and per-case metrics are stored under:
+
+`evaluation/stage2_anatomy_gate/representative_exports/`
+
+The four exported case metrics were checked against the original 69-case evaluation results and matched to four decimal places.
+
+**Interpretation:** Anatomical gating is a useful false-positive reduction strategy, particularly for the evaluated LiTS cases. However, the KiTS19 failure example demonstrates that gating can remove substantial true-positive regions. It should therefore be treated as an experimental inference refinement, not as a universally superior replacement for the baseline prediction.
 
 ---
 
